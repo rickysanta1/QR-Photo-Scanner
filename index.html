@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QR Code Scanner</title>
+  <style>
+    ::-webkit-scrollbar {
+      display: none;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Arial', sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .container {
+      background: white;
+      border-radius: 20px;
+      padding: 30px;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+      max-width: 500px;
+      width: 100%;
+      text-align: center;
+    }
+
+    h1 {
+      color: #333;
+      margin-bottom: 30px;
+      font-size: 2.5em;
+      font-weight: 300;
+    }
+
+    .scanner-container {
+      position: relative;
+      margin-bottom: 30px;
+      border-radius: 15px;
+      overflow: hidden;
+      background: #f0f0f0;
+    }
+
+    #video {
+      width: 100%;
+      height: 300px;
+      object-fit: cover;
+      display: block;
+    }
+
+    #canvas {
+      display: none;
+    }
+
+    .overlay {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 200px;
+      height: 200px;
+      border: 3px solid #667eea;
+      border-radius: 15px;
+      pointer-events: none;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0% {
+        opacity: 0.5;
+      }
+
+      50% {
+        opacity: 1;
+      }
+
+      100% {
+        opacity: 0.5;
+      }
+    }
+
+    .controls {
+      margin-bottom: 30px;
+    }
+
+    button {
+      background: linear-gradient(45deg, #667eea, #764ba2);
+      color: white;
+      border: none;
+      padding: 12px 30px;
+      border-radius: 25px;
+      font-size: 16px;
+      cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s;
+      margin: 0 10px;
+    }
+
+    button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+    }
+
+    button:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+
+    .result {
+      margin-top: 20px;
+      padding: 20px;
+      background: #f8f9fa;
+      border-radius: 10px;
+      border-left: 4px solid #28a745;
+      display: none;
+    }
+
+    .result.show {
+      display: block;
+      animation: slideIn 0.3s ease-out;
+    }
+
+    @keyframes slideIn {
+      from {
+        opacity: 0;
+        transform: translateY(-10px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .result h3 {
+      color: #28a745;
+      margin-bottom: 10px;
+    }
+
+    .result-text {
+      background: white;
+      padding: 15px;
+      border-radius: 8px;
+      word-break: break-all;
+      font-family: 'Courier New', monospace;
+      border: 1px solid #ddd;
+    }
+
+    .error {
+      background: #f8d7da;
+      color: #721c24;
+      padding: 15px;
+      border-radius: 8px;
+      border-left: 4px solid #dc3545;
+      margin-top: 20px;
+      display: none;
+    }
+
+    .error.show {
+      display: block;
+      animation: slideIn 0.3s ease-out;
+    }
+
+    .status {
+      margin-top: 15px;
+      padding: 10px;
+      border-radius: 8px;
+      font-weight: bold;
+    }
+
+    .status.scanning {
+      background: #d4edda;
+      color: #155724;
+    }
+
+    .status.stopped {
+      background: #f8d7da;
+      color: #721c24;
+    }
+
+    .status.loading {
+      background: #d1ecf1;
+      color: #0c5460;
+    }
+
+    .file-upload {
+      margin: 20px 0;
+      padding: 20px;
+      border: 2px dashed #ddd;
+      border-radius: 10px;
+      background: #f9f9f9;
+    }
+
+    .upload-preview {
+      margin-top: 15px;
+      text-align: center;
+    }
+
+    .upload-preview img {
+      max-width: 100%;
+      max-height: 200px;
+      border-radius: 8px;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    }
+
+    .upload-preview.processing {
+      color: #007bff;
+      font-weight: bold;
+    }
+
+    @media (max-width: 768px) {
+      .container {
+        padding: 20px;
+        margin: 10px;
+      }
+
+      h1 {
+        font-size: 2em;
+      }
+
+      #video {
+        height: 250px;
+      }
+
+      .overlay {
+        width: 150px;
+        height: 150px;
+      }
+
+      button {
+        padding: 10px 20px;
+        font-size: 14px;
+        margin: 5px;
+        display: block;
+        width: 100%;
+      }
+
+      .upload-preview img {
+        max-height: 150px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="container">
+    <h1>QR Code Scanner</h1>
+
+    <div class="scanner-container">
+      <video id="video" autoplay muted playsinline></video>
+      <canvas id="canvas"></canvas>
+      <div class="overlay"></div>
+    </div>
+
+    <div class="controls">
+      <button id="startBtn">Start Scanner</button>
+      <button id="stopBtn" disabled>Stop Scanner</button>
+    </div>
+
+    <div class="file-upload">
+      <input type="file" id="fileInput" accept="image/*" style="display: none;">
+      <button id="uploadBtn">📁 Upload Image</button>
+      <div id="uploadPreview" class="upload-preview"></div>
+    </div>
+
+    <div id="status" class="status loading">Click "Start Scanner" to begin</div>
+
+    <div id="result" class="result">
+      <h3>QR Code Detected!</h3>
+      <div id="resultText" class="result-text"></div>
+    </div>
+
+    <div id="error" class="error"></div>
+  </div>
+
+  <!-- Include jsQR library from CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+
+  <script>
+    class QRScanner {
+      constructor() {
+        this.video = document.getElementById('video');
+        this.canvas = document.getElementById('canvas');
+        this.ctx = this.canvas.getContext('2d');
+        this.startBtn = document.getElementById('startBtn');
+        this.stopBtn = document.getElementById('stopBtn');
+        this.status = document.getElementById('status');
+        this.result = document.getElementById('result');
+        this.resultText = document.getElementById('resultText');
+        this.error = document.getElementById('error');
+        this.fileInput = document.getElementById('fileInput');
+        this.uploadBtn = document.getElementById('uploadBtn');
+        this.uploadPreview = document.getElementById('uploadPreview');
+        this.stream = null;
+        this.scanning = false;
+        this.animationId = null;
+        this.init();
+      }
+      init() {
+        // Event listeners
+        this.startBtn.addEventListener('click', () => this.startScanning());
+        this.stopBtn.addEventListener('click', () => this.stopScanning());
+        this.uploadBtn.addEventListener('click', () => this.fileInput.click());
+        this.fileInput.addEventListener('change', (e) => this.handleFileUpload(e));
+        // Handle video metadata loaded
+        this.video.addEventListener('loadedmetadata', () => {
+          this.canvas.width = this.video.videoWidth;
+          this.canvas.height = this.video.videoHeight;
+        });
+      }
+      async startScanning() {
+        try {
+          this.hideError();
+          this.hideResult();
+          this.setStatus('loading', 'Requesting camera access...');
+          // Request camera access
+          this.stream = await navigator.mediaDevices.getUserMedia({
+            video: {
+              facingMode: 'environment', // Use back camera on mobile
+              width: {
+                ideal: 1280
+              },
+              height: {
+                ideal: 720
+              }
+            }
+          });
+          this.video.srcObject = this.stream;
+          this.scanning = true;
+          // Update UI
+          this.startBtn.disabled = true;
+          this.stopBtn.disabled = false;
+          this.setStatus('scanning', 'Scanning for QR codes...');
+          // Start the scanning loop
+          this.scanFrame();
+        } catch (err) {
+          console.error('Error accessing camera:', err);
+          this.showError(this.getCameraErrorMessage(err));
+          this.setStatus('stopped', 'Camera access denied');
+        }
+      }
+      stopScanning() {
+        this.scanning = false;
+        if (this.animationId) {
+          cancelAnimationFrame(this.animationId);
+          this.animationId = null;
+        }
+        if (this.stream) {
+          this.stream.getTracks().forEach(track => track.stop());
+          this.stream = null;
+        }
+        this.video.srcObject = null;
+        // Update UI
+        this.startBtn.disabled = false;
+        this.stopBtn.disabled = true;
+        this.setStatus('stopped', 'Scanner stopped');
+        this.hideResult();
+      }
+      scanFrame() {
+        if (!this.scanning) return;
+        if (this.video.readyState === this.video.HAVE_ENOUGH_DATA) {
+          // Draw video frame to canvas
+          this.ctx.drawImage(this.video, 0, 0, this.canvas.width, this.canvas.height);
+          // Get image data
+          const imageData = this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height);
+          // Scan for QR code
+          const code = jsQR(imageData.data, imageData.width, imageData.height);
+          if (code) {
+            this.handleQRCodeDetected(code);
+          }
+        }
+        // Continue scanning
+        this.animationId = requestAnimationFrame(() => this.scanFrame());
+      }
+      handleQRCodeDetected(code) {
+        console.log('QR Code detected:', code.data);
+        // Show result
+        this.showResult(code.data);
+        // Optionally stop scanning after detection
+        // this.stopScanning();
+      }
+      showResult(text) {
+        this.resultText.textContent = text;
+        this.result.classList.add('show');
+        this.hideError();
+      }
+      hideResult() {
+        this.result.classList.remove('show');
+      }
+      showError(message) {
+        this.error.textContent = message;
+        this.error.classList.add('show');
+        this.hideResult();
+      }
+      hideError() {
+        this.error.classList.remove('show');
+      }
+      setStatus(type, message) {
+        this.status.className = `status ${type}`;
+        this.status.textContent = message;
+      }
+      async handleFileUpload(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        // Validate file type
+        if (!file.type.startsWith('image/')) {
+          this.showError('Please select an image file.');
+          return;
+        }
+        try {
+          // Clear previous results and show processing
+          this.hideError();
+          this.hideResult();
+          this.uploadPreview.innerHTML = '<div class="processing">Processing image...</div>';
+          this.setStatus('loading', 'Scanning uploaded image...');
+          // Create image element
+          const img = new Image();
+          img.onload = () => {
+            // Set canvas size to match image
+            this.canvas.width = img.width;
+            this.canvas.height = img.height;
+            // Draw image to canvas
+            this.ctx.drawImage(img, 0, 0);
+            // Show image preview
+            this.uploadPreview.innerHTML = '';
+            const previewImg = img.cloneNode();
+            this.uploadPreview.appendChild(previewImg);
+            // Get image data and scan for QR code
+            const imageData = this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height);
+            const code = jsQR(imageData.data, imageData.width, imageData.height);
+            if (code) {
+              this.showResult(code.data);
+              this.setStatus('scanning', 'QR code found in image!');
+            } else {
+              this.showError('No QR code found in the image. Please try another image.');
+              this.setStatus('stopped', 'No QR code detected');
+            }
+            // Clear the file input so the same file can be selected again
+            this.fileInput.value = '';
+          };
+          img.onerror = () => {
+            this.showError('Failed to load the image. Please try another file.');
+            this.uploadPreview.innerHTML = '';
+            this.setStatus('stopped', 'Error loading image');
+            this.fileInput.value = '';
+          };
+          // Load image from file
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            img.src = e.target.result;
+          };
+          reader.readAsDataURL(file);
+        } catch (error) {
+          console.error('Error processing file:', error);
+          this.showError('Error processing the image. Please try again.');
+          this.uploadPreview.innerHTML = '';
+          this.setStatus('stopped', 'Processing error');
+          this.fileInput.value = '';
+        }
+      }
+      getCameraErrorMessage(error) {
+        switch (error.name) {
+          case 'NotAllowedError':
+            return 'Camera access denied. Please allow camera permissions and try again.';
+          case 'NotFoundError':
+            return 'No camera found on this device.';
+          case 'NotSupportedError':
+            return 'Camera access is not supported in this browser.';
+          case 'NotReadableError':
+            return 'Camera is already in use by another application.';
+          default:
+            return `Camera error: ${error.message}`;
+        }
+      }
+    }
+    // Check for required APIs
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      document.getElementById('error').textContent = 'Camera API not supported in this browser.';
+      document.getElementById('error').classList.add('show');
+      document.getElementById('startBtn').disabled = true;
+    } else if (typeof jsQR === 'undefined') {
+      document.getElementById('error').textContent = 'QR code library failed to load.';
+      document.getElementById('error').classList.add('show');
+      document.getElementById('startBtn').disabled = true;
+    } else {
+      // Initialize the QR scanner
+      new QRScanner();
+    }
+  </script>
+</body>
+
+</html>
